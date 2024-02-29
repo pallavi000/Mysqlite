@@ -15,6 +15,12 @@ class Mysqlite {
             password: "",
         });
     }
+    convertToPreparedStatement(data) {
+        const columns = Object.keys(data).join(",");
+        const values = Object.values(data);
+        const placeholders = values.map((value) => "?").join(", ");
+        return { columns, values, placeholders };
+    }
     async createTable(name, columns) {
         try {
             const MAX_VARCHAR_LENGTH = 255;
@@ -49,9 +55,7 @@ class Mysqlite {
         }
     }
     async insert(tableName, data) {
-        const columns = Object.keys(data).join(",");
-        const values = Object.values(data);
-        const placeholders = values.map((value) => "?").join(", ");
+        const { columns, values, placeholders } = this.convertToPreparedStatement(data);
         const sql = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders})`;
         try {
             const [result] = await this.connection.promise().query(sql, values);
@@ -80,7 +84,23 @@ class Mysqlite {
             console.log(error);
         }
     }
-    async delete(name, id) {
+    async findByIdAndUpdate(name, id, data) {
+        try {
+            const keys = Object.keys(data);
+            const values = Object.values(data);
+            values.push(id);
+            const conditionsArray = [];
+            keys.forEach((key) => {
+                conditionsArray.push(`${key}=?`);
+            });
+            const conditions = conditionsArray.join(", ");
+            const sql = `UPDATE ${name} SET ${conditions} WHERE id = ? LIMIT 1`;
+            const [result] = await this.connection.promise().query(sql, values);
+            console.log(result);
+        }
+        catch (error) { }
+    }
+    async findByIdAndDelete(name, id) {
         try {
             const sql = `DELETE FROM ${name} WHERE id= ${id} LIMIT 1`;
             const [result, fields] = await this.connection.promise().query(sql);
@@ -106,23 +126,24 @@ class Mysqlite {
 }
 exports.Mysqlite = Mysqlite;
 const mysqlite = new Mysqlite("nest-test");
-// const fxn = async () => {
-//   const a = await mysqlite.createTable("result", [
-//     { name: "subject", type: "VARCHAR" },
-//     { name: "full", type: "VARCHAR" },
-//     { name: "pass", type: "VARCHAR" },
-//   ]);
-//   console.log(a, "result");
-//   const data = {
-//     subject: "Science",
-//     full: "Yes",
-//     pass: "No",
-//   };
-//   const del = await mysqlite.delete("result", 2);
-//   console.log(del);
-//   const dat = await mysqlite.insert("result", data);
-//   const res = await mysqlite.find("result");
-// last call
-//   mysqlite.closeConnection();
-// };
-// fxn();
+const fxn = async () => {
+    //   const a = await mysqlite.createTable("result", [
+    //     { name: "subject", type: "VARCHAR" },
+    //     { name: "full", type: "VARCHAR" },
+    //     { name: "pass", type: "VARCHAR" },
+    //   ]);
+    //   console.log(a, "result");
+    const data = {
+        subject: "math",
+        full: "Yes",
+        pass: "No",
+    };
+    //   const del = await mysqlite.delete("result", 2);
+    //   console.log(del);
+    //   const dat = await mysqlite.insert("result", data);
+    // const res = await mysqlite.find("result");
+    const res = mysqlite.findByIdAndUpdate("result", 3, data);
+    // last call
+    mysqlite.closeConnection();
+};
+fxn();
