@@ -1,149 +1,88 @@
 "use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Mysqlite = void 0;
-const mysql2_1 = __importDefault(require("mysql2"));
-class Mysqlite {
-    constructor(database) {
-        this.connection = mysql2_1.default.createConnection({
-            host: "localhost",
-            user: "root",
-            database: database,
-            port: 3306,
-            password: "",
+const pluralize_1 = require("pluralize");
+const promise_1 = __importDefault(require("mysql2/promise"));
+const query_1 = require("./query");
+class MySql {
+    static Schema(column) {
+        let columnDefinitions = [];
+        const keys = Object.keys(column);
+        keys.forEach((key) => {
+            columnDefinitions.push(`${key} ${this.generateSqlDataType(key, column === null || column === void 0 ? void 0 : column[key])}`);
         });
+        const columns = columnDefinitions.join(",");
+        return columns;
     }
-    convertToPreparedStatement(data) {
-        const columns = Object.keys(data).join(",");
-        const values = Object.values(data);
-        const placeholders = values.map((value) => "?").join(", ");
-        return { columns, values, placeholders };
-    }
-    async createTable(name, columns) {
+    static async connect(config) {
         try {
-            const MAX_VARCHAR_LENGTH = 255;
-            let columnDefinition = "";
-            columns.forEach((column, index) => {
-                if (column.type === "INT") {
-                    columnDefinition += `${column.name} ${column.type}(11)`;
-                }
-                else {
-                    columnDefinition += `${column.name} ${column.type}(${MAX_VARCHAR_LENGTH})`;
-                }
-                if (index < columns.length - 1) {
-                    columnDefinition += ",";
-                }
-            });
-            const primaryKey = "id INT AUTO_INCREMENT PRIMARY KEY";
-            const [rows, fields] = await this.connection
-                .promise()
-                .query(`SHOW TABLES LIKE '${name}'`);
-            if (!rows.length) {
-                const sql = `CREATE TABLE ${name}  (${primaryKey} ,${columnDefinition})`;
-                console.log(sql);
-                await this.connection.promise().query(sql);
-            }
-            else {
-                console.log("table already exists");
-            }
-            return `${name}  table created`;
+            this.mySqlConfig = config;
+            const { synchronize } = config, restOfConfig = __rest(config, ["synchronize"]);
+            this.connection = await promise_1.default.createConnection(restOfConfig);
+            return this.connection;
         }
         catch (error) {
-            console.log(error);
+            throw error;
         }
     }
-    async insert(tableName, data) {
-        const { columns, values, placeholders } = this.convertToPreparedStatement(data);
-        const sql = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders})`;
-        try {
-            const [result] = await this.connection.promise().query(sql, values);
-            console.log(result);
-            if (result && result.affectedRows > 0) {
-                console.log("Data inserted successfully.");
-                return true;
-            }
-            else {
-                console.log("No data inserted.");
-                return false;
-            }
+    static generateSqlDataType(columnName, column) {
+        let columnType = "";
+        if (column.type === String) {
+            columnType = "VARCHAR(255)";
         }
-        catch (error) {
-            console.log(error);
+        else if (column.type === Number) {
+            columnType = "INT(11)";
         }
+        else if (column.type === Boolean) {
+            columnType = "BOOLEAN";
+        }
+        else {
+            columnType = "VARCHAR(100)";
+        }
+        if (column.required) {
+            columnType = `${columnType} NOT NULL CHECK(${columnName}>'')`;
+        }
+        if (column.unique) {
+            columnType = `${columnType} UNIQUE`;
+        }
+        if (column.default) {
+            columnType = `${columnType} DEFAULT ${column.default}`;
+        }
+        return columnType;
     }
-    async find(name) {
-        try {
-            const sql = `SELECT * FROM ${name}`;
-            const [rows, fields] = await this.connection.promise().query(sql);
-            console.log(rows);
-            return rows;
-        }
-        catch (error) {
-            console.log(error);
-        }
+    static getTableName(name) {
+        return (0, pluralize_1.plural)(name).toLocaleLowerCase();
     }
-    async findByIdAndUpdate(name, id, data) {
-        try {
-            const keys = Object.keys(data);
-            const values = Object.values(data);
-            values.push(id);
-            const conditionsArray = [];
-            keys.forEach((key) => {
-                conditionsArray.push(`${key}=?`);
-            });
-            const conditions = conditionsArray.join(", ");
-            const sql = `UPDATE ${name} SET ${conditions} WHERE id = ? LIMIT 1`;
-            const [result] = await this.connection.promise().query(sql, values);
-            console.log(result);
+    static async model(name, columnDefinition) {
+        const tableName = this.getTableName(name);
+        if (this.mySqlConfig.synchronize) {
+            await this.connection.query(`DROP TABLE IF EXISTS ${tableName}`);
         }
-        catch (error) { }
-    }
-    async findByIdAndDelete(name, id) {
-        try {
-            const sql = `DELETE FROM ${name} WHERE id= ${id} LIMIT 1`;
-            const [result, fields] = await this.connection.promise().query(sql);
-            if (result && result.affectedRows > 0) {
-                // Return success response
-                return {
-                    success: true,
-                    message: `Record with ID ${id} deleted successfully.`,
-                };
-            }
-            else {
-                // If no rows were affected, it means no record was found with the provided ID
-                return { success: false, message: `Record with ID ${id} not found.` };
-            }
+        const primaryKey = "id INT AUTO_INCREMENT PRIMARY KEY";
+        const query = `CREATE TABLE ${tableName}  (${primaryKey} ,${columnDefinition})`;
+        console.log(columnDefinition);
+        const [rows, fields] = await this.connection.query(`SHOW TABLES LIKE '${tableName}'`);
+        if (!rows.length) {
+            await this.connection.query(query);
+            console.log("table crated!");
         }
-        catch (error) {
-            console.log(error);
+        else {
+            console.log("table alreayd exists");
         }
-    }
-    async closeConnection() {
-        await this.connection.end();
+        // need to pass something to do insert, udpat etc
+        return new query_1.SQLQuery(this.connection, tableName);
     }
 }
-exports.Mysqlite = Mysqlite;
-const mysqlite = new Mysqlite("nest-test");
-const fxn = async () => {
-    //   const a = await mysqlite.createTable("result", [
-    //     { name: "subject", type: "VARCHAR" },
-    //     { name: "full", type: "VARCHAR" },
-    //     { name: "pass", type: "VARCHAR" },
-    //   ]);
-    //   console.log(a, "result");
-    const data = {
-        subject: "math",
-        full: "Yes",
-        pass: "No",
-    };
-    //   const del = await mysqlite.delete("result", 2);
-    //   console.log(del);
-    //   const dat = await mysqlite.insert("result", data);
-    // const res = await mysqlite.find("result");
-    const res = mysqlite.findByIdAndUpdate("result", 3, data);
-    // last call
-    mysqlite.closeConnection();
-};
-fxn();

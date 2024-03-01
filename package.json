@@ -10,6 +10,10 @@
   "license": "ISC",
   "dependencies": {
     "mysql2": "^3.9.2",
+    "pluralize": "^8.0.0",
     "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@types/pluralize": "^0.0.33"
   }
 }
