@@ -1,10 +1,25 @@
 export class SQLQuery<T> {
   constructor(private connection: any, private tableName: string) {}
 
-  async find(where: T) {
+  private generateFilterQuery(where: any) {
+    const keys = Object.keys(where);
+    const filterQuery: string[] = [];
+    keys.forEach((key) => {
+      filterQuery.push(`${key}=?`);
+    });
+    return filterQuery.join(` AND `);
+  }
+
+  async find(where: any = {}) {
     try {
-      const sql = `SELECT * FROM ${this.tableName}`;
-      const [result] = await this.connection.query(sql);
+      const whereQuery = this.generateFilterQuery(where);
+      let whereFilter = "";
+      if (whereQuery) {
+        whereFilter = ` WHERE ${whereQuery}`;
+      }
+      const sql = `SELECT * FROM ${this.tableName}${whereFilter}`;
+      const filterValues = Object.values(where);
+      const [result] = await this.connection.query(sql, filterValues);
       return result;
     } catch (error) {
       throw error;

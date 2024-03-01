@@ -6,10 +6,24 @@ class SQLQuery {
         this.connection = connection;
         this.tableName = tableName;
     }
-    async find(where) {
+    generateFilterQuery(where) {
+        const keys = Object.keys(where);
+        const filterQuery = [];
+        keys.forEach((key) => {
+            filterQuery.push(`${key}=?`);
+        });
+        return filterQuery.join(` AND `);
+    }
+    async find(where = {}) {
         try {
-            const sql = `SELECT * FROM ${this.tableName}`;
-            const [result] = await this.connection.query(sql);
+            const whereQuery = this.generateFilterQuery(where);
+            let whereFilter = "";
+            if (whereQuery) {
+                whereFilter = ` WHERE ${whereQuery}`;
+            }
+            const sql = `SELECT * FROM ${this.tableName}${whereFilter}`;
+            const filterValues = Object.values(where);
+            const [result] = await this.connection.query(sql, filterValues);
             return result;
         }
         catch (error) {
