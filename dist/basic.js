@@ -125,25 +125,3 @@ class Mysqlite {
     }
 }
 exports.Mysqlite = Mysqlite;
-const mysqlite = new Mysqlite("nest-test");
-const fxn = async () => {
-    //   const a = await mysqlite.createTable("result", [
-    //     { name: "subject", type: "VARCHAR" },
-    //     { name: "full", type: "VARCHAR" },
-    //     { name: "pass", type: "VARCHAR" },
-    //   ]);
-    //   console.log(a, "result");
-    const data = {
-        subject: "math",
-        full: "Yes",
-        pass: "No",
-    };
-    //   const del = await mysqlite.delete("result", 2);
-    //   console.log(del);
-    //   const dat = await mysqlite.insert("result", data);
-    // const res = await mysqlite.find("result");
-    const res = mysqlite.findByIdAndUpdate("result", 3, data);
-    // last call
-    mysqlite.closeConnection();
-};
-fxn();
